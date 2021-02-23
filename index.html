@@ -1,0 +1,274 @@
+
+
+
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1.24.min.js"></script>
+<script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.6.15/aws-sdk.min.js"></script>
+<script type="text/javascript" src="jquery.serializejson.js"></script>
+<script async src="script.js"></script>
+<script type="text/javascript">
+//Bucket Configurations
+var bucketName = '';
+var bucketNameFormData = '';
+var bucketRegion = '';
+var IdentityPoolId = "";
+var formDataURL = '';
+
+ AWS.config.update({
+                region: bucketRegion,
+                credentials: new AWS.CognitoIdentityCredentials({
+                    IdentityPoolId: IdentityPoolId
+                })
+            });
+
+            var s3 = new AWS.S3({
+                apiVersion: '2006-03-01',
+                params: {Bucket: bucketName}
+                
+        });
+
+            var s3FormData = new AWS.S3({
+                apiVersion: '2006-03-01',
+                params: {Bucket: bucketNameFormData}
+                
+        });
+
+        function s3upload() {
+            var files = document.getElementById('fileUpload').files;
+            if (files) {
+                var file = files[0];
+                var fileName = file.name;
+                var filePath = fileName;
+                var fileUrl = 'https://' + bucketRegion + '.amazonaws.com/' +  fileName;
+                s3.upload({
+                    Key: fileName,
+                    Body: file,
+                    ACL: 'public-read'
+                    }, function(err, data) {
+                    if(err) {
+                    reject('error');
+                    }
+                    alert('File has been normalize successfully.');
+                    }).on('httpUploadProgress', function (progress) {
+                    var uploaded = parseInt((progress.loaded * 100) / progress.total);
+                    $("progress").attr('value', uploaded);
+                    });
+            }
+        }
+
+        function s3uploadFormData() {
+            var fileName = 'normalize_audio_parameters.json'
+            var I = document.getElementsByName('I')[0].value;
+            var LRA = document.getElementsByName('LRA')[0].value;
+            var TP = document.getElementsByName('TP')[0].value;
+
+            
+            var object = {
+                I : parseInt(I),
+                LRA : parseInt(LRA),
+                TP : parseInt(TP)
+            }
+            
+            var json_object = JSON.stringify(object)
+            var fileUrl = 'https://' + bucketRegion + '.amazonaws.com/' +  fileName;
+            s3FormData.upload({
+                Key : fileName,
+                Body : json_object,
+                ACL : 'public-read'
+            }, function(err, data){
+                if(err) {
+                    reject('error');
+                }
+                allert('Success);')
+            }).on('httpUploadProgress', function (progress) {
+                var uploaded = parseInt((progress.loaded * 100) / progress.total);
+                $('progress').attr('value', uploaded);
+            });
+        }
+            
+
+        function displayJsonContents() {
+
+            var params = {
+                Bucket : bucketNameFormData,
+                Key : 'normalize_audio_parameters.json'
+            }
+
+            var json_data = s3FormData.getObject(params)
+            var parsedObject = JSON.parse(json_data)
+
+            document.getElementById('I-param').innerHTML = parsedObject['I'];
+            document.getElementById('LRA-param').innerHTML = parsedObject['LRA'];
+            document.getElementById('TP-param').innerHTML = parsedObject['TP'];
+        }
+
+
+        async function s3EmptyBucket() {
+            const listParams = {
+                Bucket: bucketName
+            };
+            const listedObjects = await s3.listObjectsV2(listParams).promise();
+
+            if (listedObjects.Contents.length === 0) return;
+
+            const deleteParams = {
+                Bucket: bucket,
+                Delete: {
+                    Objects: getDeleteObjects(listedObjects),
+                },
+            };
+
+            await s3.deleteObjects(deleteParams).promise();
+
+            if (listedObjects.IsTruncated) await emptyS3Directory(bucket);
+        }
+
+        // var allKeys = []
+
+        // function allBucketKeys() {
+        //     var params = {
+        //         Bucket : bucketName
+        //     };
+        //     s3.listObjects(params, function(err, data){
+        //         allKeys.push(data.name);
+        //     })
+        //     // return data
+        //     document.getElementById('bucketKeys').innerHTML = allKeys
+
+        // }
+    
+        let allKeys = [];
+
+        function allBucketKeys() {
+            allKeys = [];
+            var params = {
+                Bucket: bucketName    
+            };
+    
+            s3.listObjectsV2(params, function (err, data) {
+                if (err) {
+                    console.log(err, err.stack); // an error occurred
+                } else {
+                    var contents = data.Contents;
+                    contents.forEach(function (content) {
+                        allKeys.push(content.Key);
+                    });
+
+                    if (data.IsTruncated) {
+                        params.ContinuationToken = data.NextContinuationToken;
+                        console.log("get further list...");
+                        listAllKeys();
+                    } 
+
+                }
+            });
+            document.getElementById('bucketKeys').innerHTML = allKeys.toString()
+            // var allKeys = [];
+        }
+
+</script>
+
+<html>
+<head>
+<style>
+h1 {text-align: center;}
+form {text-align: center;}
+div {text-align: center;}
+img {align-items: center;}
+</style>
+
+
+</head>
+<body>
+
+
+<p style='text-align:center;'><img src="waveform.png" alt="waveform" style="width:300px;height:150px;"></p>
+
+
+<header>
+    <h1>Audio Normalization</h1>
+  </header>
+
+<div>
+    <h5>A simple web app to aid in the normalization of audio files to a specified integrated loudness, loudness range, and true peak.</h5>
+</div>
+
+<div>
+    <h6>Choose files to upload.  Previous parameters are displayed below.  To update these parameters, input desired values in the form and select "Update Parameters".  Once all files have been uploaded and parameters have been specified, click "Download Files".</h6>
+</div>
+
+<div>        
+    <input type="file" id="fileUpload">    
+</div><br>  
+
+<div> 
+   <button onclick="s3upload();">Upload</button>    
+</div><br> 
+
+<!-- <div> 
+    <button onclick="allBucketKeys();">Available Files</button>    
+ </div><br>  -->
+
+
+<div>
+    <h5>file1.wav</h5>
+    <h5>file2.wav</h5>
+    <h5>file3.wav</h5>
+    <h5>file4.wav</h5>
+    <h5>...</h5>
+</div>
+
+ <div>
+ <output id="bucketKeys"></output>
+ </div>
+
+<div> 
+    <button onclick="s3EmptyBucket()">Clear Uploads</button>    
+ </div><br> 
+
+ <div>
+     <h2>Recent Parameters:</h2>
+     <h3>I: -24.0 | LRA: 7.0 | TP: -2.0</h3>
+     <h4 id="I-param"> </h4>
+     <h4 id="LRA-param"> </h4>
+     <h4 id="TP-param"> </h4>
+     <!-- <h4>I:-24.0 | LRA: 7.0 | TP: -2.0</h4> -->
+ </div>
+
+  <form id="parameter-form" method="post">
+
+    <h4>Integrated Loudness:</h4>
+    <input type="text" name='I' style="height:35px;" id="I-input" placeholder="Range: -70.0 to -5.0" class="form-control" style="width:130%;" /><br/>
+
+    <h4>Loudness Range:</h4>
+    <input type="text" name='LRA' style="height:35px;" id="LRA-input" placeholder="Range: 1.0 to 20.0" class="form-control" style="width:130%;"/><br/>
+
+    <h4>True Peak:</h4>
+    <input type="text" name='TP' style="height:35px;" id="TP-input" placeholder="Range: -9.0 to 0.0" class="form-control" style="width:130%;"/><br/>
+
+    <div class="g-recaptcha" data-sitekey="6Lc7cVMUAAAAAM1yxf64wrmO8gvi8A1oQ_ead1ys" class="form-control" style="width:100%;"></div>
+    
+</form>
+
+ 
+ <div> 
+    <button onclick="s3uploadFormData()">Update Parameters</button>    
+ </div><br> 
+
+ <div> 
+    <button onclick="displayJsonContents()">Display JSON</button>    
+ </div><br> 
+
+
+ <div> 
+    <button>Process Files</button>    
+ </div><br> 
+
+ <div> 
+    <button>Download Files</button>    
+ </div><br> 
+
+
+</body>
+</html>
+
